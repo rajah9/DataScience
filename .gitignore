@@ -1,0 +1,7 @@
+# Project exclude paths
+/venv/
+__pycache__/
+.idea/
+.ipynb_checkpoints/
+# Project exclude files
+*.pyc
