@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
@@ -7,6 +8,8 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
+from sklearn.feature_extraction.text import CountVectorizer
+
 from typing import Callable, List
 from Util import Util
 
@@ -28,6 +31,7 @@ class DataScienceUtil(Util):
         super().__init__()
         self.param_grid = None
         self.grid = None
+        self._vectorizer = None
 
     @staticmethod
     def convert_lower_case(sent: str) -> str:
@@ -173,3 +177,39 @@ class DataScienceUtil(Util):
             self.logger.warning('AttributeError: LabelEncoder was not found.')
             self.logger.warning('No LabelEncoder. Please call label_encoder first.')
             return None
+
+    @staticmethod
+    def count_vector(df:pd.DataFrame, column_name:str, y:list=None):
+        """
+        Return a count vector for the documents in column_name
+        :param df:
+        :param column_name:
+        :param y:
+        :return:
+        """
+        vectorizer = CountVectorizer()
+        # print(vectorizer.get_feature_names())
+        ans = vectorizer.fit_transform(raw_documents=df[column_name], y=y)
+        return ans
+
+    def count_vectorizer(self, df:pd.DataFrame, column_name:str, y:list=None):
+        """
+        Return a count vector for the documents in column_name
+        :param df:
+        :param column_name:
+        :param y:
+        :return:
+        """
+        self._vectorizer = CountVectorizer()
+        # print(vectorizer.get_feature_names())
+        ans = self._vectorizer.fit_transform(raw_documents=df[column_name], y=y)
+        return ans
+
+    def vectorizer_features(self) -> list:
+        """
+        Return a list of the feature names.
+        :return:
+        """
+        if self._vectorizer:
+            return self._vectorizer.get_feature_names()
+        self.logger.warning('Uninitialized vector. Please call count_vectorizer first.')
