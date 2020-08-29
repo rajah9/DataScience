@@ -3,12 +3,13 @@ import numpy as np
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.tree import tree
 
 from typing import Callable, List
 from Util import Util
@@ -21,6 +22,33 @@ Interesting Python features:
 ** train_model(X_train, y_train, f_classifier: Callable[[], list]=None, seed:int=42) -> list:
 ** the f_classifier is passed in (or a default is used)
 * Subclasses Util and does a super().__init__(). This gets it a self.logger.
+Rough outline
+0. Import Libraries
+  a. from DataScienceUtil import DataScienceUtil
+  b. dsu = DataScienceUtil()
+1. Import Dataset (see PandasUtil)
+2. Visualize Dataset (see PlotUtil)
+3. Fit the data
+  a. for count vectorizer
+    1. vec = dsu.count_vectorizer(df, 'text')
+    2. logger.debug (f'vector is type: {type(vec)} and shape {vec.shape}')
+    3. features = dsu.vectorizer_features()
+    4. vec.shape
+    5. features[5500:5520]
+  b. for Naive bayes
+    1. norm_amount = DataScienceUtil.scale(X=df['Amount'].values.reshape(-1,1))
+    2. df['Amount_Norm']= norm_amount
+4. Training the model
+  a - f (See PandasUtil)
+  g. X_train, X_test, y_train, y_test = DataScienceUtil.train_test_split(X=X, y=y, test_frac=0.3)
+  h. from sklearn.naive_bayes import MultinomialNB
+  i. bayes_classifier = DataScienceUtil.train_model(X_train, y_train, f_classifier = MultinomialNB)
+  j. y_predict_train = DataScienceUtil.model_predict(classifier=bayes_classifier, X_test=X_test)
+5. Evaluating the model
+  a. cm = DataScienceUtil.confusion_matrix(y_test, y_predict_train)
+  b. plu.heatmap(cm)
+  c. report = DataScienceUtil.classification_report(y_test, y_predict_train)
+  d. print (f'Classification report:\n{report}')
 """
 
 # Following are one-time imports that may be commented out after they are downloaded.
@@ -51,14 +79,19 @@ class DataScienceUtil(Util):
     def train_model(X_train, y_train, f_classifier: Callable[[], list]=None, seed:int=0, param_dict:dict={}) -> list:
         """
         Train a model with the given classifier. Return the predicted y for the test set.
-        :param X: matrix of input variables
-        :param y: response vector
-        :param test_frac: proportion used for testing; 0.2 = 20%
+        Example:
+          from sklearn.ensemble import RandomForestClassifier
+          rfc_dict = {'n_estimators': 150}
+          random_forest_classifier = DataScienceUtil.train_model(X_train, y_train, f_classifier = RandomForestClassifier, param_dict=rfc_dict) #RandomForestClassifier(n_estimators=150)
+
+        :param X_train: matrix of input variables
+        :param y_train: response vector
         :param f_classifier: function passed in as a classifier. Will default to LR, but here's SVC:
-        from sklearn.svm import SVC
-        classifier = DataScienceUtil.train_model(X_train, y_train, f_classifier=SVC, seed=0)
-        :param seed:
-        :return: predicted output for the test set.
+          from sklearn.svm import SVC
+          classifier = DataScienceUtil.train_model(X_train, y_train, f_classifier=SVC, seed=0)
+        :param seed: integer random seed (defaults to 0)
+        :param param_dict: dictionary of any params needed for f_classifier. Random forest takes n_estimators: {'n_estimators': 150}
+        :return:
         """
         if seed:
             param_dict['random_state'] = seed
@@ -71,7 +104,7 @@ class DataScienceUtil(Util):
     @staticmethod
     def model_predict(classifier, X_test:list) -> list:
         """
-        Predict using the given classifier
+        Predict using the given classifier.
         :param classifier:
         :param X_test:
         :return:
@@ -83,6 +116,13 @@ class DataScienceUtil(Util):
     def train_test_split(X: list, y: list, test_frac: float = 0.2, seed: int = 42) -> list:
         """
         Train a model with the given classifier. Return the predicted y for the test set.
+        Example:
+          target_col = 'Kyphosis'
+          df_X = pu.drop_col(df, columns=target_col, is_in_place = False) # X drops the target column
+          df_y = pu.drop_col_keeping(df, cols_to_keep=target_col, is_in_place=False) # y is only the target vector
+          X = pu.convert_dataframe_to_matrix(df_X) # converts to numpy ndarray
+          y = pu.convert_dataframe_to_vector(df_y) # reshapes to vector
+          X_train, X_test, y_train, y_test = DataScienceUtil.train_test_split(X=X, y=y, test_frac=0.3)
         :param X: matrix of input variables
         :param y: response vector
         :param test_frac: proportion used for testing; 0.2 = 20%
@@ -92,7 +132,16 @@ class DataScienceUtil(Util):
         return train_test_split(X, y, test_size=test_frac, random_state = seed)
 
     @staticmethod
-    def classification_report(y_test:list, y_predict:list) -> list:
+    def classification_report(y_test:list, y_predict:list) -> str:
+        """
+        Return a string of the precision, recall, and F1 scores.
+        Example usage:
+          report = DataScienceUtil.classification_report(y_test, y_predict_train)
+          print (f'Classification report:\n{report}')
+        :param y_test:
+        :param y_predict:
+        :return: newline-delimited string
+        """
         return classification_report(y_test, y_predict)
 
     @staticmethod
@@ -156,9 +205,12 @@ class DataScienceUtil(Util):
 
     def label_encoder(self, y: list) -> list:
         """
-        Encode a list of labels.
-        :param y:
-        :return:
+        Encode a list of labels. To switch df['Kyphosis'] from "active"/"inactive" to 1/0, try this code:
+            dsu = DataScienceUtil()
+            df['Kyphosis'] = dsu.label_encoder(df['Kyphosis'])
+
+        :param y: a df vector
+        :return:  the vector encoded
         """
         self._le = LabelEncoder()
         y = self._le.fit_transform(y)
@@ -205,6 +257,7 @@ class DataScienceUtil(Util):
         ans = self._vectorizer.fit_transform(raw_documents=df[column_name], y=y)
         return ans
 
+
     def vectorizer_features(self) -> list:
         """
         Return a list of the feature names.
@@ -213,3 +266,33 @@ class DataScienceUtil(Util):
         if self._vectorizer:
             return self._vectorizer.get_feature_names()
         self.logger.warning('Uninitialized vector. Please call count_vectorizer first.')
+
+    def feature_importance(self, decision_tree_classifier: tree, df_X: pd.DataFrame) -> pd.DataFrame:
+        """
+        For a decision tree, return a dataframe of the feature importances.
+        Calling example:
+          from sklearn.tree import DecisionTreeClassifier
+          decision_tree = DataScienceUtil.train_model(X_train, y_train, f_classifier = DecisionTreeClassifier)
+          feature_importance = dsu.feature_importance(decision_tree_classifier=decision_tree_classifier, df_X=df_X)
+        :param decision_tree_classifier:
+        :return:
+        """
+        cols = df_X.columns
+        feature_importances = pd.DataFrame(decision_tree_classifier.feature_importances_,
+                                           index=cols,
+                                           columns=['importance']).sort_values('importance', ascending=False)
+        return feature_importances
+
+    @staticmethod
+    def confusion_matrix(actual: list, predicted: list) -> list:
+        """
+        This is usually used for y vs. y-predicted.
+        Calling example (using the output of this routine as input to a plot)
+          y_predict_train = DataScienceUtil.model_predict(classifier=random_forest_classifier, X_test=X_test)
+          cm = DataScienceUtil.confusion_matrix(y_test, y_predict_train)
+          plu.heatmap(cm)
+        :param actual:
+        :param predicted:
+        :return:
+        """
+        return confusion_matrix(actual, predicted)

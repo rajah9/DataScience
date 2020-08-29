@@ -5,3 +5,4 @@ __pycache__/
 .ipynb_checkpoints/
 # Project exclude files
 *.pyc
+/ML-Classification-Package - Shortcut.lnk
